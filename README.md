@@ -1,116 +1,127 @@
-# NoCoE_TS_management
-Series of powershell scripts for automating SCCM OSD deployments
+# <span style="color:khaki">**NoCoE Task Sequence Management**</span>
+Series of powershell scripts for automating SCCM OSD / non-OSD task sequence deployments
 
-I. Overview
+Intended to be used in Enterprise environments, integrating VMWare ESXi, Citrix and SCCM.
+
+<span style="color:mediumpurple">**Purpose**</span>
 ===========
 
-The No-Continue-On-Error initiative, or NoCoE abbreviated aims to remove the use of the Continue-On-Error Flag currently in use in BFS Task sequences for Dedicated Clients. The need to do so comes from that fact that there is currently poor consistency in the quality of newly build Dedicated clients -- some may lack apps, settings or features. Also, no convenient, fast-acting and close to real-time process to give insight as to what exactly happens during the execution of BFS-s (or any other DedC Task sequences) currently exists.
+The No-Continue-On-Error initiative, or NoCoE abbreviated aims to remove the use of the Continue-On-Error Flag currently in use in BFS Task sequences for Dedicated Clients. The need to do so comes from that fact that there is currently poor consistency in the quality of newly built Dedicated clients - some may lack apps, settings or features. Also, no convenient, fast-acting and close to real-time process to give insight as to what exactly happens during the execution of BFS-s (or any other DedC Task sequences) currently exists.
 
-1.Main components and workflow
+<span style="color:mediumpurple">**1. Main components and workflow**</span>
 ------------------------------
 
-The NoCoE implementation requires a high degree of automation to service machines that fail on some of the steps in them. This is primarily the result of the exceptionally poor application quality of most Core applications in use within the Environment -- e.g., during the execution of a NoCoE BFS, a step to install the FSLogix application for example, might randomly fail but then install correctly and not cause issues if a second execution of the BFS is triggered following the first.
+The NoCoE implementation requires a high degree of automation to service machines that fail on some of the steps in them. This is primarily the result of the exceptionally poor application quality of most Core applications in use within the Environment - e.g., during the execution of a NoCoE BFS, a step to install the FSLogix application for example, might randomly fail but then install correctly and not cause issues if a second execution of the BFS is triggered following the first.
 
 To that end, there are 3 main components that work in unison to ensure all devices, being imaged using a NoCoE BFS, come out properly built:
 
-**The Client-side Script**  -- It's found in the TS itself and Its function is to collect relevant data after a terminal event is reached during the execution of the sequence (either success or failure) and record that data to a Dashboard.txt file at the Script share, while also differentiating between 4 different Sequence types, 2 Device Environment types and the Release Version of the TS.
+* <span style="color:deepskyblue">**The Client-side script**</span> - It's found in the TS itself and Its function is to collect relevant data after a terminal event is reached during the execution of the sequence (either success or failure) and record that data to a Dashboard.txt file at the Script share, while also differentiating between 4 different Sequence types, 2 Device Environment types and the Release Version of the TS.
 
-**The Script share & Dashboard**  -- Serves as a central hub to host the collected data from the client-side script and a singular place from which troubleshooting, reporting and historical data gathering can be performed on all machines that were imaged using a NoCoE BFS / NoCoE Upgrade TS, without needing to actually log on to the machines themselves.
+ * <span style="color:deepskyblue">**The Script share & Dashboard**</span> - Serves as a central hub to host the collected data from the client-side script and a singular place from which troubleshooting, reporting and historical data gathering can be performed on all machines that were imaged using a NoCoE BFS / NoCoE Upgrade TS, without needing to actually log on to the machines themselves.
 
-**The Server-side scripts**  -- A series of scripts working in tandem to read the Dashboard file every 30 minutes and perform appropriate post operations on all machines, for which an entry in the Dashboard exists. The appropriate post operations vary depending on the execution result of the BFS / Upgrade TS for each individual machine
+ * <span style="color:deepskyblue">**The Server-side scripts**</span> - A series of scripts working in tandem to read the Dashboard file every 30 minutes and perform appropriate post operations on all machines, for which an entry in the Dashboard exists. The appropriate post operations vary depending on the execution result of the BFS / Upgrade TS for each individual machine
 
-2.The Client-side Script
+<span style="color:mediumpurple">**2.The Client-side Script**</span>
 ------------------------
 
-It's the same for all 3 Regions and exists as an SCCM Package with no set Program. This is because it's intended to be run as a "Run Command Line" TS step, and for that no Program is needed to be specified.
+Exists as an SCCM Package with no set Program. This is because it's intended to be run as a "Run Command Line" TS step and packages implemented in that form don't require installation programs to be set as a property in the Package object itself.
 
-### a)Input Data Collection
+### <span style="color:deepskyblue">**a) Input Data Collection**</span>
 
 The Client-side script collects real-time execution data by using Task Sequence Variables. In terms of how they receive their value, they can be:
 
 > **Warning**
-> There are two types of TS Variables:  
+> There are two types of TS Variables in general, irrsepective of the definitions used in this project:  
 > 
-> **Automatic** -- Generated by default when a TS starts executing, recognizable by having "_" as the first character of the variable name or "OSD" as the first three of the variable name:  
+> <span style="color:DarkRed">**Automatic**</span> - Generated by default when a TS starts executing, recognizable by having "_" as the first character of the variable name or "OSD" as the first three of the variable name:  
 > 
-> Custom -- Created explicitly under a Set Task Sequence Variable, Set Dynamic Variables step types or created explicitly when the output of a Run Powershell Script or > Run Command Line step is fed to a variable
+> <span style="color:DarkRed">**Custom**</span> - Created explicitly under a Set Task Sequence Variable, Set Dynamic Variables step types or created explicitly when the output of a Run Powershell Script or > Run Command Line step is fed to a variable
 
 
 
 
-####  i. Explicit
+####  <span style="color:aquamarine">**i. Explicit**</span>
 
 An engineer must manually set their value when creating the sequence.
 
-##### 1) Set Release Version
+##### <span style="color:skyblue">**1) Set Release Version**</span>
 
 Defines the name of the Release. Basically, having a set number of applications with specific versions placed under the umbrella of a single Release Version string (also commonly referred to as Image Version) enables you to quickly identify that a machine running on PR002 for example will have apps x, y, z installed and setting o, p q set.
 
 It's essentially a way of branding a machine. And it's quite important in many regards besides the above -- Many reports use the Release Version as an identifier of compliance.
 
-##### 2) IsBFS Modifier
+##### <span style="color:skyblue">**2) IsBFS Modifier**</span>
 
-**Must be a string of either "Yes" or "No".**
+> **Warning**
+> Must be a string of either "Yes" or "No".
+
+****
 
 Determines whether the sequence is intended to be used for BFS (new devices) or Upgrade (bi-monthly releaes) and what the folder in which the Dashboard is housed will be called.
 
-##### 3) IsSAC Modifier
+##### <span style="color:skyblue">**3) IsSAC Modifier**</span>
 
-**Must be a string of either "Yes" or "No".**
+> **Warning**
+> Must be a string of either "Yes" or "No".
 
 Determines whether the sequence is intended to be used for SAC Devices (carrying a Windows Version greater than what's currently out there, e.g. 22H2) or not and what the folder in which the Dashboard is housed will be called.
 
-##### 4) FailedStepName (Only if the execution was successful)
+##### <span style="color:skyblue">**4) FailedStepName (Only if the execution was successful)**</span>
+
+> **Warning**
+> Must always be a string of <span style="color:green">**"NoStepsFailed"**</span>  Acts as a keyword. If it's set to something else, the Client-side script will wrongly assume that the execution was a failure..
+
+##### <span style="color:skyblue">**5) FailedStepReturnCode (only if the execution was successful)**</span>
+
+> **Note**
+> Can be any string. Has no impact if the execution was successful.
 
 
-**Must always be a string of "NoStepsFailed".**  Acts as a keyword. If it's set to something else, the Client-side script will wrongly assume that the execution was a failure.
+####  <span style="color:aquamarine">**ii. Dynamic**</span>
 
-##### 5) FailedStepReturnCode (only if the execution was successful)
+An engineer sets template values, **but the variables themselves only get assigned 1 of the possible template values, depending on a criterion (if clause).** This is accomplished using a Set Dynamic Variables TS step
 
-**Can be any string. **Has no impact if the execution was successful.**
+##### <span style="color:skyblue">**1) The following NoCoE-related variables are set here**</span>
 
-**
+<span style="color:deepskyblue">**DeviceEnvironment**</span>: Can be either INT or PROD
 
-####  ii. Dynamic
+<span style="color:deepskyblue">**TSLogShare**</span>: This is the script share, different for each data center:
 
-An engineer sets template values, **but the variables themselves only get assigned 1 of the possible template values, depending on a criterion (if clause).** This is accomplished using Set Dynamic Variables TS step
+Data Center | UNC Path
+------ | -----
+| E1	| <Confidential: Script Share UNC Path> |
+| E2	| <Confidential: Script Share UNC Path> |
+| NA1	| <Confidential: Script Share UNC Path> |
+| NA2	| <Confidential: Script Share UNC Path> |
+| AP1	| <Confidential: Script Share UNC Path> |
+| AP2	| <Confidential: Script Share UNC Path> |
 
-##### 1)   
+##### <span style="color:aquamarine">2) "Gather Data about the failed step" -- Only in case of Failure</span>
 
-"Gather Machine Specific Variables"\
-The following NoCoE-related variables are set here
+***Assigns the values of the relevant automatic TS variables to Custom variables***
 
-**DeviceEnvironment**: Can be either INT or PROD
+***Also sets the overall TS execution result marker*** variable called <span style="color:gold">**MainBodySuccess**</span>  to <span style="color:darkred">**False**</span>
 
-**TSLogShare**: This is the script share, different for each data center:
-
-**CONFIDENTIAL**
-
-##### 2) "Gather Data about the failed step" -- Only in case of Failure
-
-***Assigns the values of the relevant automatic TS variables to Custom variables***:
-
-***Also sets the overall TS execution result marker*** variable called **MainBodySuccess**  to **False**
-
-***Also sets the default dialog timeout to 24 hrs*** -- this has the effect that it prevents a machine that has failed a step from being accessible to end users and engineers until the Server-side scripts take care of the machine
+***Also sets the default dialog timeout to 24 hrs*** - this has the effect that it prevents a machine that has failed a step from being accessible to end users and engineers until the Server-side scripts take care of the machine
 
 Side effect here is also that via the VMWare console, ***you can visually determine which step has failed, by moving the dialog window. Useful for manual troubleshooting***.
 
-####  iii. Automatic
+####  <span style="color:aquamarine">iii. Automatic</span>
 
-***Generated by default by the TS manager, with most of them, their values explicitly passed to custom variables:
+***Generated by default by the TS manager, with most of them, their values explicitly passed to custom variables:***
+
+Variable Name | Function
+------ | -----
+| **_SMSTSMachineName**	| The Computer Name of the machine, executing the TS |
+| **_SMSTSLastActionName**	| The name of the Last executed step in the TS |
+| **_SMSTSLastActionRetCode**	| The return code of the last executed step in the TS |
+| **_SMSTSLogPath**	| The local path used to store the smsts.log during the TS execution |
 
 
-**_SMSTSMachineName**
-**_SMSTSLastActionName**
-**_SMSTSLastActionRetCode**
-**_SMSTSLogPath** - Gets the location where the SMSTS log is hosted at during the TS Exection. It is hosted at various different directories during the various stages of the execution, e.g. Before and OS Image is applied, at X:\Windows\CCM\Logs\SMSTaskSequence
 
- |
+### <span style="color:deepskyblue">d)Determining the Sequence Type</span>
 
-### d)Determining the Sequence Type
-
-***The combination of the IsBFS and IsSAC modifiers create the following 4 potential Sequence types:
+***The combination of the IsBFS and IsSAC modifiers create the following 4 potential Sequence types:***
 
 | IsBFS	| IsSAC	| Resulting Sequence Type |
 | ------------- | ------------- | ------------- |
@@ -119,230 +130,79 @@ Side effect here is also that via the VMWare console, ***you can visually determ
 | No	| Yes	| SAC_Upgrade – For upgrades targeting SAC machines (higher winver) |
 | Yes	| Yes	| SAC_BFS – for newly created SAC Machines (higher winver) |
 
-| First Header  | Second Header |
-| ------------- | ------------- |
-| Content Cell  | Content Cell  |
-| Content Cell  | Content Cell  |
-
 ***The resulting sequence type is also resolved by the server-side scripts.***
 
-### e)Creating Folder Structures and the Dashboard file
+### <span style="color:deepskyblue">e)Creating Folder Structures and the Dashboard file</span>
 
 The sequence types in conjunction with the **ReleaseVersion**  also determine the folder structure at the script share and where the Dashboard will be located:
 
-|
+| Sequence Type	| Device Environment | Release Version | Example Resulting Dashboard Path |
+| ------------- | ------------- | ------------- | ------------- |
+| BFS | INT | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\BFS\INT\PR001_23_PR023\Dashboard.txt |
+| SAC_BFS | INT | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\SAC_BFS\INT\PR001_23_PR023\Dashboard.txt |
+| Upgrade | INT | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\Upgrade\INT\PR001_23_PR023\Dashboard.txt |
+| SAC_Upgrade | INT | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\SAC_Upgrade\INT\PR001_23_PR023\Dashboard.txt |
+| BFS | PROD | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\BFS\INT\PR001_23_PR023\Dashboard.txt |
+| SAC_BFS | PROD | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\SAC_BFS\INT\PR001_23_PR023\Dashboard.txt |
+| Upgrade | PROD | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\Upgrade\INT\PR001_23_PR023\Dashboard.txt |
+| SAC_Upgrade | PROD | PR001_23_PR023 | <ScriptShare_UNC>\Dedicated_TS_Management\SAC_Upgrade\INT\PR001_23_PR023\Dashboard.txt |
+
+> **Warning**
+> There can and will obviously by separate folders for each Release Version when all other parameters are constant
+
+### <span style="color:deepskyblue">f)Collecting OS Info</span>
 
-**Sequence Type**
-
- |
-
-**Device Environment**
-
- |
-
-**Release Version**
-
- |
-
-**Example Resulting Folder Path / Dashboard Path**
-
- |
-|
-
-**BFS**
-
- |
-
-INT
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\BFS\INT\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**SAC_BFS**
-
- |
-
-INT
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\SAC_BFS\INT\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**Upgrade**
-
- |
-
-INT
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\Upgrade\INT\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**SAC_Upgrade**
-
- |
-
-INT
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\SAC_Upgrade\INT\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**BFS**
-
- |
-
-PROD
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\BFS\PROD\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**SAC_BFS**
-
- |
-
-PROD
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\SAC_BFS\PROD\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**Upgrade**
-
- |
-
-PROD
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\Upgrade\PROD\PR001_23_PR023\Dashboard.txt
-
- |
-|
-
-**SAC_Upgrade**
-
- |
-
-PROD
-
- |
-
-PR001_23_PR023
-
- |
-
-\\aalwshfrk402\Dedicated_TS_Management\SAC_Upgrade\PROD\PR001_23_PR023\Dashboard.txt
-
- |
-
-![Текстово поле: Important! There can and will obviously by separate folders for each Release Version when all other parameters are constant
-
-](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image023.png)
-
-### f)Collecting OS Info
-
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image025.jpg)\
 The Client-side script also collects information about the OS Version by constructing a string from the relevant registries on the machine:
 
-### g)Dashboard Entry Operations
-
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image027.jpg)
+### <span style="color:deepskyblue">g)Dashboard Entry Operations</span>
 
 The script appends an entry for the executing machine at the appropriate dashboard file.
 
-|  |
-|  | ![Текстово поле: Important! Historical Data can be obtained by the server-side scripts
-
-](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image028.png) |
-
 ***Historical Data is not preserved.*** There can only be 1 entry for a machine in each Dashboard file. ***This is done on purpose so that always the most recent execution result data can be copy-pasted from the Dashboard to an excel file for easy overview of how successful the release has been.***
 
-![Текстово поле: Important! NEVER USE BRACKETS IN TS STEP NAMES! Using them prevents the Main server-side script from replacing the entry for the machine in the Dashboard file, which could result in a machine being improperly branded as a failure and stuck in a constant boot loop. Root cause of the issue is the way that the -replace Powershell operator works.
+> **Note**
+> Historical Data can be obtained by the server-side scripts
 
-](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image029.png)
+> **Warning**
+> NEVER USE BRACKETS IN TS STEP NAMES! Using them prevents the Main server-side script from replacing the entry for the machine in the Dashboard file, which could result in a machine being improperly branded as a failure and stuck in a constant boot loop. Root cause of the issue is the way that the -replace Powershell operator works.
 
-### h)Log Retrieval Operations\
+### <span style="color:deepskyblue">h)Log Retrieval Operations</span>
 If the TS Execution has been a failure, the **smstslog**, containing information about everything that occurred during the execution of the TS is automatically uploaded to the script share.
-
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image032.png)
 
 This is particularly useful with BFS sequences, since if something fails during initial OSDdeployment it's very inconvenient to dig up the smstslog, due to the lag from the VMWare Console and the need to basically use the WinPE as a medium. This is because until the execution is finished and the machine is restarted, any command line tools will start from the perspective of WinPE, not being able to make use of the local HW Resources on the machine.
 
-***Following a successful TS Execution after an initial failure, the TS logs from the failure are deleted to conserve disk space at the script share.***
+> **Note**
+> ***Following a successful TS Execution after an initial failure, the TS logs from the failure are deleted to conserve disk space at the script share.***
 
-### i)Local Registry branding (Not working)
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image035.png)\
-The Client-side script also attempts to create a subkey at **HKLM:\SOFTWARE\AVC** that contains some of the most relevant data about the execution result:
 
-This is useful since, it can be imported in SCCM as a custom class, making it extremely easy to get actual real-time data about which TS Executions have been successful on a particular machine, when the server-side scripts have performed post-operations, etc.
+### <span style="color:deepskyblue">i) Local Registry branding</span>
 
-**At the time of writing, this function is not working, because the account under which the Client-side script is run, is not a local administrator on the machine during the execution of the TS.**
+The Client-side script also attempts to create a subkey at <span style="color:gold">**HKLM:\SOFTWARE\<CompanyName>**</span> that contains some of the most relevant data about the execution result, such as:
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image037.jpg)
+<span style="color:gold">The Execution Result</span>
 
-***This can be fixed by adding the relevant account as an admin in the beginning of the TS, or moving this function to a separate step:***
+<span style="color:gold">The Execution Result Time</span>
 
-### j)Local Client-side script logs
+<span style="color:gold">The Failed Step Name (If the execution was a failure)</span>
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image038.png)\
+<span style="color:gold">The Failed Step Return Code (If the execution was a failure)</span>
+
+<span style="color:gold">Post Operations Performed</span>
+
+<span style="color:gold">Post Operations Perform Time</span>
+
+### <span style="color:deepskyblue">j) Local Client-side script logs</span>
+
+
 For troubleshooting purposes, the Client-side script also created a local Verbose log on the system that details every operation made.
 
-It can be found at:
+It can be found at: <span style="color:gold">C:\Temp\TS_Management.log</span>
 
-3.The Server-side Scripts
+<span style="color:mediumpurple">**3.The Server-side Scripts**</span>
 -------------------------
 
-### a)General organization
+### <span style="color:deepskyblue">a) General organization</span>
 
 As of the time of writing there are 8 worker scripts, each performing a specific action for a single machine and 1 Main script that coordinates when the workers are called for each machine for which data from the Dashboard File has been retrieved.
 
@@ -350,128 +210,146 @@ This modular structure allows the individual workers to be easily edited without
 
 ***In the future this also allows additional worker scripts to be created, performing additional new actions.***
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image039.png)\
-**The Main TS Manager script (and therefore by extension -- the workers as well) needs 5 input parameters to execute**:
+**The Main TS Manager script (and therefore by extension - the workers as well) needs 5 input parameters to execute**:
 
-**and is intended to run as a Scheduled task on the Script Share, periodically to perform post operations as frequently as possible on the target device types.**
+<span style="color:gold">$Region</span>
 
-### b)Scheduled Tasks
+<span style="color:gold">$SequenceType</span>
 
-|  |
-|  | ![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image040.png) |
+<span style="color:gold">$DeviceEnvironment</span>
 
-As previously mentioned, since 5 input parameters are required, different scheduled Tasks with different parameters must coexist:
+<span style="color:gold">$ReleaseName</span>
 
-|  |
-|  | ![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image042.jpg) |
+<span style="color:gold">$IsSAC</span>
+
+<span style="color:gold">$RemoveFromCollection</span>
+
+<span style="color:aquamarine">**and is intended to run as a Scheduled task on the Script Share, periodically to perform post operations as frequently as possible on the target device types.**</span>
+
+### <span style="color:deepskyblue">b) Scheduled Tasks</span>
+
+
+As previously mentioned, since 5 input parameters are required, different scheduled Tasks with different parameters must coexist.
+
 
 ***This has the benefit and flexibility of having separate scanning / post-ops frequencies for different Sequence types and devices.***
 
 For example, since Upgrade Sequences for PROD are intended to run on weekends only and are therefore concentrated in a span of 48 hours or less, the execution frequency for that scheduled Task can be set to be every 10 minutes and only on Saturdays and Sundays, and additionally parallel instances of the Task can be enabled to combat the relative high activity spike.
 
-By contrast since new devices are created throughout the week, the BFS PROD Task can be set to ![Текстово поле: Important As it's obvious, a Release Version Name must be supplied to the script and therefore the scheduled task. This necessitates that an engineer manually changes the string in the properties of the Task:
+By contrast since new devices are created throughout the week, the BFS PROD Task can be set to
 
-This is done entirely on purpose -- A recuring issue had been the fact that few people know of all DedC Processes running in the background and therefore can't answer questions, manage, or deal with situations. i.e., a human element bottleneck is created.
+>**Warning**
+> As it's obvious, a Release Version Name must be supplied to the script and therefore the scheduled task. This necessitates that an engineer manually changes the string in the properties of the Task
+>
+>This is done entirely on purpose -- A recuring issue had been the fact that few people know of all DedC Processes running in the background and therefore can't answer questions, manage, or deal with situations. i.e., a human element bottleneck is created.
+>
+>By making it one of the build engineer's responsibilities to change the Release Version string twice a month, familiarity is established more or less
 
-By making it one of the build engineer's responsibilities to change the Release Version string twice a month, familiarity is established more or less
 
-](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image044.png)\
-execute every 2 hours, every day.
+execute every 30 minutes, every day.
 
-### c)Scenarios
+### <span style="color:deepskyblue">c) Scenarios</span>
 
-|  |
-|  | ![Текстово поле: Important When post operations by the server-side scripts are performed for a given machine, the PostOpsPerformed property is changed to "Yes". This ensures that post-ops will be performed only once per machine, and any potential boot loops will be avoided.
+They represent a given set of actions that need to be performed against a specific TS execution result for a given machine – e.g. Succcess / Failure.
 
-In the future, adding additional scenarios beyond Success / Failure can be implemented in the script as an additional tool to remedy commonly observed large-scale failure phenomena.
-](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image046.png) |\
-They represent a given set of actions that need to be performed against a specific TS execution result for a given machine -- e.g. Succcess / Failure.
+>**Warning**
+> When post operations by the server-side scripts are performed for a given machine, the PostOpsPerformed property is changed to "Yes". This ensures that post-ops will be performed only once per machine, and any potential boot loops will be avoided.
+>
+>In the future, adding additional scenarios beyond Success / Failure can be implemented in the script as an additional tool to remedy commonly observed large-scale failure phenomena.
 
-### d)Server-side Scripts Log types and organization
+### <span style="color:deepskyblue">d)Server-side Scripts Log types and organization</span>
 
-####  i. Verbose Logs
+####  <span style="color:skyblue">i. Verbose Logs</span>
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image048.jpg)\
 Contain detailed verbose information for every action taken during every execution of the Main and Worker scripts. Can be used for troubleshooting.
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image050.jpg)
+Created at:
 
-####  ii. Short Logs
+<span style="color:gold">$PSScriptRoot\VerboseLogs</span>
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image053.png)\
+####  <span style="color:skyblue">ii. Short Logs</span>
+
+
 Contain bare minimum information regarding actions taken by the Worker scripts and care formatted with tab character separators and Header lines to enable easy copy-pasting to excel sheets.
 
-**Depending on the outcome of the operation, can be either**
+Created at:
 
-**Of the _FailSkip Type** -- containing failures information.
+<span style="color:gold">$PSScriptRoot\ShortLogs</span>
 
-|  |
-|  | ![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image054.png) |
+>**Note**
+>**Depending on the outcome of the operation, can be either**
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image055.png)\
-**Of the _Success Type** -- containing successful executions information.
 
-**\
-**
+<span style="color:navajowhite">**Of the _FailSkip Type**</span> - containing failures information.
 
-4.Main TS Manager script
+<span style="color:navajowhite">**Of the _Success Type**</span> -- containing successful executions information.
 
-----------------------------
 
-### a)XD Operation scripts: MM mode enable / disable
+<span style="color:mediumpurple">**4.Main TS Manager script**</span>
+-------------------------
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image056.png)
+### <span style="color:deepskyblue">a) XD Operation scripts: MM mode enable / disable</span>
+
 
 They Set MM on or off respectively for a particular machine. **Reason for them to be executed on the server-side is because, issuing commands to the XD Controllers in a state where the client is not in Full OS mode (meaning BFS executions) always results in errors.**
 
-### b)XD Operations: Success/ Fail Tags
+[XD_DisableMaintenanceMode.ps1](XD_DisableMaintenanceMode.ps1)
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image057.png)
+[XD_EnableMaintenanceMode.ps1](XD_EnableMaintenanceMode.ps1)
 
-Tags machines with the appropriate Build / Upgrade tag. The tags are (**created as objects in advance at all DedC XD Controllers: AALXNDFRK101, AALXNDPAR005, AALXNDPAR401, AALXNDPHX001, AALXNDEDS001, AALXNDSGP201, AALXNDSYD201**):
+### <span style="color:deepskyblue">b) XD Operations: Success/ Fail Tags</span>
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image058.png)
+
+Tags machines with the appropriate Build / Upgrade tag.
+
+[XD_TagSuccessFail.ps1](XD_TagSuccessFail.ps1)
+
+>**Warning**
+>The Tags must be created in advance at each XD Site, the scripts rely on that and therefore have the Tag names hardcoded.
 
 **For BFS Executions the Build Tags are used by the Assignment Script to assign properly built machines to end users.**
 
-### c)XD Operations: ImgVer Tags
+### <span style="color:deepskyblue">c) XD Operations: ImgVer Tags</span>
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image059.png)
+[XD_TagImageVersion.ps1](XD_TagImageVersion.ps1)
+
 
 Tag the machine with an ImgVer Tag, enabling easy filtering through the XD Consoles.
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image061.jpg)
 
-### d)SCCM Operations: Collection membership changes
+### <span style="color:deepskyblue">d) SCCM Operations: Collection membership changes</span>
 
-####  i. Update Memberships:
+####  <span style="color:skyblue">i. Update Memberships</span>
 
-####  ii. Remove Device from Collection:
+[SCCM_CollectionUpdater.ps1](SCCM_CollectionUpdater.ps1)
 
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image062.png)
+####  <span style="color:skyblue">ii. Remove Device from Collection</span>
 
-### e)SCCM Operations: PXE Deployments clearing
+[SCCM_Coll_Remover.ps1](SCCM_Coll_Remover.ps1)
+
+### <span style="color:deepskyblue">e)SCCM Operations: PXE Deployments clearing</span>
+
+[SCCM_ClearReqPXEDeployment.ps1](SCCM_ClearReqPXEDeployment.ps1)
 
 Clears the required PXE Deployments for the machine.
-
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image063.png)
 
 ***In the SCCM database there's data for which Required PXE Deployments have been executed on a machine. SCCM uses that data to allow / not allow a subsequent exection of the deployment.***
 
 ***By clearing that Required PXE Deployments flag for a given machines, the next time the machine is restated it will automatically pick up and start executing the deployment again -- useful for BFS Sequences.***
 
-![Текстово поле: Important After the command to clear PXE Deployments for a given machine is issued, there's a cooldown period of about 90 seconds that must pass for the change to go into effect, hence the programmed CooldownInterval:](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image064.png)
+>**Warning**
+>After the command to clear PXE Deployments for a given machine is issued, there's a cooldown period of about 90 seconds that must pass for the change to go into effect, hence the programmed CooldownInterval
+>
+>This setup doesn't work with UEFI Machines. This is because if a machine has been formatted as UEFI, the EFI Boot manager will be the first boot option for the VM no matter what, therefore even if you clear the Required PXE Deployments, the machine still wouldn't start running the Sequence again. There doesn't seem to be a way around this, because in order to have a UEFI-enabled Windows Installation, and EFI partition must be created and that's exactly where the EFI Boot manager is located on the device drive. Additionally, there doesn't seem to be a way to modify the VM .vmdk file to expect a Boot order change on the OS-level.
 
-![Текстово поле: Important This setup doesn't work with UEFI Machines. This is because if a machine has been formatted as UEFI, the EFI Boot manager will be the first boot option for the VM no matter what, therefore even if you clear the Required PXE Deployments, the machine still wouldn't start running the Sequence again. There doesn't seem to be a way around this, because in order to have a UEFI-enabled Windows Installation, and EFI partition must be created and that's exactly where the EFI Boot manager is located on the device drive. Additionally, there doesn't seem to be a way to modify the VM .vmdk file to expect a Boot order change on the OS-level.](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image065.png)
+### <span style="color:deepskyblue">f) VMWare Operations: Restarting a VM</span>
 
-### f)VMWare Operations: Restarting a VM
-
-![](file:///C:/Users/mr_cr/AppData/Local/Temp/msohtmlclip1/01/clip_image066.png)
+[VMWare_Restart.ps1](VMWare_Restart.ps1)
 
 Restarts a given machine in VMWare.
 
 **Has two restart modes**:
 
-**Hard**  -- equivalent to pressing the restart button on a physical machine, when executed the machine is restarted immediately. If the machine has an OS, system files could be corrupted because of this. Therefore this is the preferred restart method for BFS Execution where data preservation after a failed BFS is not a concern.
+<span style="color:gold">**Hard**</span> - equivalent to pressing the restart button on a physical machine, when executed the machine is restarted immediately. If the machine has an OS, system files could be corrupted because of this. Therefore this is the preferred restart method for BFS Execution where data preservation after a failed BFS is not a concern.
 
-**Soft**  -- equivalent to clicking Power -- Restart from the start menu. Command is issued to the Guest OS of the VM through VMWareTools. Safer option to use for Upgrade Sequences. **Note that VMWare Tools must be installed in Windows to enable this power action.**
+<span style="color:gold">**Soft**</span> - equivalent to clicking Power - Restart from the start menu. Command is issued to the Guest OS of the VM through VMWareTools. Safer option to use for Upgrade Sequences. **Note that VMWare Tools must be installed in Windows to enable this power action.**
