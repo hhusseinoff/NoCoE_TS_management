@@ -6,7 +6,7 @@
 ##
 ##        Last Update: Jan 10th, 2023
 ##
-##        Intended to run periodically as a scheduled task on the Scripting servers (AALWSHFRKxxx, AALWSHPARxxx, AALSCRPHXxxx. AALSCREDSxxx,)
+##        Intended to run periodically as a scheduled task
 ##
 ###################################################################################################################################################
 
